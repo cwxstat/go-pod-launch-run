@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"k8s.io/api/core/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -218,5 +217,5 @@ func execCommandsInPod(clientset *kubernetes.Clientset, namespace, podName, cont
 		outputBuffer.WriteString("\n")
 	}
 
-	return ioutil.WriteFile(outputFile, outputBuffer.Bytes(), 0644)
+	return os.WriteFile(outputFile, outputBuffer.Bytes(), 0644)
 }
