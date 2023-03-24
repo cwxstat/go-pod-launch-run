@@ -1,0 +1,6 @@
+[book]
+authors = ["Mike Chirico (https://mchirico.github.io/)"]
+language = "en"
+multilingual = false
+src = "src"
+title = "client-go Go"
