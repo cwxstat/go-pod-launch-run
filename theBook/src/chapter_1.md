@@ -1,5 +1,7 @@
 # Chapter 1
 
+You can run this example *inside* a pod, to interact with another Pod, or itself.
+
 ```go
 package main
 
