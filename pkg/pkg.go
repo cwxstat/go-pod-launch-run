@@ -34,6 +34,10 @@ func Run(podName, namespace, containerName, serviceAccountName string, commands 
 		panic(err)
 	}
 
+	if len(commands) == 0 {
+		commands = []string{"aws configure list", "aws sts get-caller-identity"}
+	}
+
 	//podName := "aws-cli-pod"
 	//namespace := "default"
 	//containerName := "aws-cli"
@@ -59,7 +63,8 @@ func Run(podName, namespace, containerName, serviceAccountName string, commands 
 		}
 
 		// Execute the commands and write the output to a file
-		err = execCommandsInPod(clientset, namespace, podName, containerName, []string{"aws configure list", "aws sts get-caller-identity"}, "result.pod")
+		err = execCommandsInPod(clientset,
+			namespace, podName, containerName, commands, output)
 		if err != nil {
 			panic(err)
 		}
