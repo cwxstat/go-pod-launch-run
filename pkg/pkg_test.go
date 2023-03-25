@@ -6,9 +6,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
+	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/client-go/util/flowcontrol"
 	"net/url"
 	"testing"
 	"time"
@@ -103,13 +107,70 @@ type mockSPDYExecutorFactory struct {
 	err      error
 }
 
+func NewMock() *mockSPDYExecutorFactory {
+	return &mockSPDYExecutorFactory{
+		executor: &mockExecutor{},
+		err:      nil,
+	}
+}
+
 func (f *mockSPDYExecutorFactory) NewSPDYExecutor(config *rest.Config, method string, url *url.URL) (remotecommand.Executor, error) {
 	return f.executor, f.err
+}
+
+type mockExecutor struct {
+	err error
+}
+
+func (m *mockExecutor) Stream(options remotecommand.StreamOptions) error {
+	return nil
+}
+func (m *mockExecutor) StreamWithContext(ctx context.Context, options remotecommand.StreamOptions) error {
+	return nil
+}
+
+type mRestClient struct{}
+
+func (m *mRestClient) GetRateLimiter() flowcontrol.RateLimiter {
+	return nil
+}
+func (m *mRestClient) Verb(verb string) *rest.Request {
+	return &rest.Request{}
+}
+func (m *mRestClient) Put() *rest.Request {
+	return &rest.Request{}
+}
+func (m *mRestClient) Patch(pt types.PatchType) *rest.Request {
+	return &rest.Request{}
+}
+func (m *mRestClient) Post() *rest.Request {
+	return &rest.Request{}
+}
+func (m *mRestClient) Get() *rest.Request {
+	return &rest.Request{}
+}
+
+func (m *mRestClient) Delete() *rest.Request {
+	return &rest.Request{}
+}
+func (m *mRestClient) APIVersion() schema.GroupVersion {
+	return schema.GroupVersion{}
+}
+
+type customFakeCoreV1 struct {
+	v1.CoreV1Interface
 }
 
 //func TestExecCommandsInPod(t *testing.T) {
 //	// Set up a fake clientset for simulating a Kubernetes cluster
 //	clientset := fake.NewSimpleClientset()
+//	// Replace the CoreV1 RESTClient with a custom fake REST client
+//
+//	// Create a custom fakev1 implementation
+//	fakev1 := &customFakeCoreV1{
+//		CoreV1Interface: clientset.CoreV1(),
+//	}
+//
 //
 //	// Define test input parameters
 //	namespace := "test-namespace"
@@ -118,14 +179,11 @@ func (f *mockSPDYExecutorFactory) NewSPDYExecutor(config *rest.Config, method st
 //	commands := []string{"echo 'Hello, world!'"}
 //	outputFile := "test_output.txt"
 //
-//
-//
-//
-//
+//	mock := NewMock()
 //
 //	cr := Config{restConfig: nil}
 //	// Execute the function with the fake clientset and test input parameters
-//	err := cr.execCommandsInPod(clientset.CoreV1()), namespace, podName, containerName, commands, outputFile)
+//	err := cr.execCommandsInPod(clientset.CoreV1(), mock, namespace, podName, containerName, commands, outputFile)
 //	assert.NoError(t, err)
 //
 //	// Check the output file for correct content
