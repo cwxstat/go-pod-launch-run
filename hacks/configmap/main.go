@@ -2,8 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"k8s.io/client-go/rest"
+	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"log"
 	"os"
 
@@ -11,46 +10,51 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 func main() {
-	var config *rest.Config
 	var err error
-	// Check if the program is running inside a Kubernetes cluster.
-	if _, err = rest.InClusterConfig(); err != nil {
-		kubeconfig := os.Getenv("KUBECONFIG")
-		if kubeconfig == "" {
-			kubeconfig = clientcmd.RecommendedHomeFile
-		}
 
-		config, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-			&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig},
-			&clientcmd.ConfigOverrides{ClusterInfo: clientcmdapi.Cluster{Server: ""}}).ClientConfig()
-		if err != nil {
-			log.Fatalf("Failed to load Kubernetes configuration: %v", err)
-		}
-	} else {
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			log.Fatalf("Failed to load in-cluster configuration: %v", err)
-		}
-	}
-	clientset, err := kubernetes.NewForConfig(config)
+	clientset, err := getClientset()
 	if err != nil {
 		log.Fatalf("Failed to create Kubernetes client: %v", err)
 	}
 
-	createConfigMap(clientset)
+	err = createConfigMap(clientset.CoreV1(), "argo", "spike2", map[string]string{
+		"example-key": "example-value",
+	})
+	if err != nil {
+		log.Fatalf("Failed to create ConfigMap: %v", err)
+	}
 }
 
-func createConfigMap(clientset *kubernetes.Clientset) {
-	namespace := "argo"
-	configMapName := "spike"
-	configMapData := map[string]string{
-		"example-key": "example-value",
+func getClientset() (*kubernetes.Clientset, error) {
+	kubeconfig := os.Getenv("KUBECONFIG")
+	if kubeconfig == "" {
+		kubeconfig = clientcmd.RecommendedHomeFile
 	}
 
+	config, err := clientcmd.LoadFromFile(kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+
+	clientConfig := clientcmd.NewDefaultClientConfig(*config, &clientcmd.ConfigOverrides{})
+	restConfig, err := clientConfig.ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	return clientset, nil
+}
+
+func createConfigMap(clientsetCoreV1 v1.CoreV1Interface, namespace, configMapName string,
+	configMapData map[string]string) error {
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMapName,
@@ -59,10 +63,6 @@ func createConfigMap(clientset *kubernetes.Clientset) {
 		Data: configMapData,
 	}
 
-	_, err := clientset.CoreV1().ConfigMaps(namespace).Create(context.TODO(), configMap, metav1.CreateOptions{})
-	if err != nil {
-		log.Fatalf("Failed to create ConfigMap: %v", err)
-	}
-
-	fmt.Printf("Successfully created ConfigMap %q in namespace %q\n", configMapName, namespace)
+	_, err := clientsetCoreV1.ConfigMaps(namespace).Create(context.TODO(), configMap, metav1.CreateOptions{})
+	return err
 }
