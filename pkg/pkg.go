@@ -12,8 +12,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	v1Inter "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/remotecommand"
+	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -21,6 +23,25 @@ import (
 
 // go get k8s.io/client-go@v0.26.3
 var timeout int64 = 60
+
+type SPDYExecutorFactory interface {
+	NewSPDYExecutor(config *rest.Config, method string, url *url.URL) (remotecommand.Executor, error)
+}
+
+type defaultSPDYExecutorFactory struct{}
+
+func (f *defaultSPDYExecutorFactory) NewSPDYExecutor(config *rest.Config, method string, url *url.URL) (remotecommand.Executor, error) {
+	//return spdy.NewSPDYExecutor(config, method, url)
+	return remotecommand.NewSPDYExecutor(config, method, url)
+}
+
+func B(i SPDYExecutorFactory) {
+	fmt.Println(i)
+}
+
+func do() {
+	B(&defaultSPDYExecutorFactory{})
+}
 
 func Run(podName, namespace, containerName, serviceAccountName string, commands []string, output string) error {
 
@@ -47,6 +68,8 @@ func Run(podName, namespace, containerName, serviceAccountName string, commands 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
+	rc, err := NewRestConfig()
+
 	// Run commands in separate goroutine
 	go func() {
 		defer wg.Done()
@@ -58,7 +81,9 @@ func Run(podName, namespace, containerName, serviceAccountName string, commands 
 		}
 
 		// Execute the commands and write the output to a file
-		err = execCommandsInPod(clientset.CoreV1(),
+
+		err = rc.execCommandsInPod(clientset.CoreV1(),
+			&defaultSPDYExecutorFactory{},
 			namespace, podName, containerName, commands, output)
 		if err != nil {
 			log.Printf("Failed to execute commands in Pod: %v", err)
@@ -200,9 +225,12 @@ func waitForPodDeletion(clientsetCoreV1 v1Inter.CoreV1Interface, namespace, podN
 		}
 	}
 }
-func execCommandsInPod(clientsetCoreV1 v1Inter.CoreV1Interface, namespace, podName, containerName string, commands []string, outputFile string) error {
-	var outputBuffer bytes.Buffer
 
+type Config struct {
+	restConfig *rest.Config
+}
+
+func NewRestConfig() (*Config, error) {
 	// Note: You need result config to be able to connect to the cluster from outside
 	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		clientcmd.NewDefaultClientConfigLoadingRules(),
@@ -210,8 +238,21 @@ func execCommandsInPod(clientsetCoreV1 v1Inter.CoreV1Interface, namespace, podNa
 	)
 	restconfig, err := kubeconfig.ClientConfig()
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	return &Config{
+		restConfig: restconfig,
+	}, nil
+}
+
+func (c *Config) execCommandsInPod(clientsetCoreV1 v1Inter.CoreV1Interface,
+	icmd SPDYExecutorFactory,
+	namespace,
+	podName,
+	containerName string,
+	commands []string, outputFile string) error {
+	var outputBuffer bytes.Buffer
 
 	for _, cmd := range commands {
 		req := clientsetCoreV1.RESTClient().Post().
@@ -226,7 +267,8 @@ func execCommandsInPod(clientsetCoreV1 v1Inter.CoreV1Interface, namespace, podNa
 				Stderr:    true,
 			}, scheme.ParameterCodec)
 
-		executor, err := remotecommand.NewSPDYExecutor(restconfig, "POST", req.URL())
+		//executor, err := remotecommand.NewSPDYExecutor(c.restConfig, "POST", req.URL())
+		executor, err := icmd.NewSPDYExecutor(c.restConfig, "POST", req.URL())
 		if err != nil {
 			return err
 		}

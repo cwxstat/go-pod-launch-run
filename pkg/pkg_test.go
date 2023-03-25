@@ -7,6 +7,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/remotecommand"
+	"net/url"
 	"testing"
 	"time"
 )
@@ -95,6 +98,15 @@ func TestWaitForPodDeletion(t *testing.T) {
 	assert.Error(t, err, "waitForPodDeletion should return an error if the pod is not deleted within the timeout")
 }
 
+type mockSPDYExecutorFactory struct {
+	executor remotecommand.Executor
+	err      error
+}
+
+func (f *mockSPDYExecutorFactory) NewSPDYExecutor(config *rest.Config, method string, url *url.URL) (remotecommand.Executor, error) {
+	return f.executor, f.err
+}
+
 //func TestExecCommandsInPod(t *testing.T) {
 //	// Set up a fake clientset for simulating a Kubernetes cluster
 //	clientset := fake.NewSimpleClientset()
@@ -106,8 +118,14 @@ func TestWaitForPodDeletion(t *testing.T) {
 //	commands := []string{"echo 'Hello, world!'"}
 //	outputFile := "test_output.txt"
 //
+//
+//
+//
+//
+//
+//	cr := Config{restConfig: nil}
 //	// Execute the function with the fake clientset and test input parameters
-//	err := execCommandsInPod(clientset.CoreV1()), namespace, podName, containerName, commands, outputFile)
+//	err := cr.execCommandsInPod(clientset.CoreV1()), namespace, podName, containerName, commands, outputFile)
 //	assert.NoError(t, err)
 //
 //	// Check the output file for correct content
