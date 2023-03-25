@@ -4,16 +4,17 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/emicklei/go-restful/v3/log"
 	"k8s.io/api/core/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
+	v1Inter "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/remotecommand"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -22,14 +23,8 @@ import (
 var timeout int64 = 60
 
 func Run(podName, namespace, containerName, serviceAccountName string, commands []string, output string) error {
-	kubeconfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 
-	if err != nil {
-		panic(err)
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
+	clientset, err := getClientset()
 	if err != nil {
 		panic(err)
 	}
@@ -43,7 +38,7 @@ func Run(podName, namespace, containerName, serviceAccountName string, commands 
 	//containerName := "aws-cli"
 
 	// Launch the Pod
-	pod, err := createPod(clientset, namespace, podName, containerName, serviceAccountName)
+	pod, err := createPod(clientset.CoreV1(), namespace, podName, containerName, serviceAccountName)
 	if err != nil {
 		panic(err)
 	}
@@ -57,25 +52,26 @@ func Run(podName, namespace, containerName, serviceAccountName string, commands 
 		defer wg.Done()
 
 		// Wait for Pod to be running
-		err = waitForPodRunning(clientset, namespace, podName)
+		err = waitForPodRunning(clientset.CoreV1(), namespace, podName)
 		if err != nil {
 			panic(err)
 		}
 
 		// Execute the commands and write the output to a file
-		err = execCommandsInPod(clientset,
+		err = execCommandsInPod(clientset.CoreV1(),
 			namespace, podName, containerName, commands, output)
 		if err != nil {
-			panic(err)
+			log.Printf("Failed to execute commands in Pod: %v", err)
+		} else {
+			fmt.Println("Commands executed successfully. Output written to result.pod.")
 		}
 
-		fmt.Println("Commands executed successfully. Output written to result.pod.")
 	}()
 
 	wg.Wait()
 
 	// Delete the Pod
-	err = deletePod(clientset, namespace, podName)
+	err = deletePod(clientset.CoreV1(), namespace, podName)
 	if err != nil {
 		panic(err)
 	}
@@ -84,7 +80,33 @@ func Run(podName, namespace, containerName, serviceAccountName string, commands 
 	return nil
 }
 
-func createPod(clientset *kubernetes.Clientset, namespace, podName, containerName, serviceAccountName string) (*v1.Pod,
+func getClientset() (*kubernetes.Clientset, error) {
+	kubeconfig := os.Getenv("KUBECONFIG")
+	if kubeconfig == "" {
+		kubeconfig = clientcmd.RecommendedHomeFile
+	}
+
+	config, err := clientcmd.LoadFromFile(kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+
+	clientConfig := clientcmd.NewDefaultClientConfig(*config, &clientcmd.ConfigOverrides{})
+	restConfig, err := clientConfig.ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	return clientset, nil
+}
+
+func createPod(clientsetCoreV1 v1Inter.CoreV1Interface, namespace, podName, containerName,
+	serviceAccountName string) (*v1.Pod,
 	error) {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -104,12 +126,12 @@ func createPod(clientset *kubernetes.Clientset, namespace, podName, containerNam
 		},
 	}
 
-	return clientset.CoreV1().Pods(namespace).Create(context.Background(), pod, metav1.CreateOptions{})
+	return clientsetCoreV1.Pods(namespace).Create(context.Background(), pod, metav1.CreateOptions{})
 }
 
-func waitForPodRunning(clientset *kubernetes.Clientset, namespace, podName string) error {
+func waitForPodRunning(clientsetCoreV1 v1Inter.CoreV1Interface, namespace, podName string) error {
 	for {
-		pod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+		pod, err := clientsetCoreV1.Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
@@ -125,18 +147,18 @@ func waitForPodRunning(clientset *kubernetes.Clientset, namespace, podName strin
 	return nil
 }
 
-func deletePod(clientset *kubernetes.Clientset, namespace, podName string) error {
+func deletePod(clientsetCoreV1 v1Inter.CoreV1Interface, namespace, podName string) error {
 	deletePolicy := metav1.DeletePropagationForeground
 	deleteOptions := metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}
 
-	err := clientset.CoreV1().Pods(namespace).Delete(context.Background(), podName, deleteOptions)
+	err := clientsetCoreV1.Pods(namespace).Delete(context.Background(), podName, deleteOptions)
 	if err != nil {
 		return fmt.Errorf("failed to delete pod %s in namespace %s: %v", podName, namespace, err)
 	}
 
-	err = waitForPodDeletion(clientset, namespace, podName, &timeout)
+	err = waitForPodDeletion(clientsetCoreV1, namespace, podName, &timeout)
 	if err != nil {
 		return fmt.Errorf("failed to wait for pod %s in namespace %s to be deleted: %v", podName, namespace, err)
 	}
@@ -144,14 +166,14 @@ func deletePod(clientset *kubernetes.Clientset, namespace, podName string) error
 	return nil
 }
 
-func waitForPodDeletion(clientset *kubernetes.Clientset, namespace, podName string, timeout *int64) error {
+func waitForPodDeletion(clientsetCoreV1 v1Inter.CoreV1Interface, namespace, podName string, timeout *int64) error {
 
 	var watchOptions = metav1.ListOptions{
 		FieldSelector:  fmt.Sprintf("metadata.name=%s", podName),
 		TimeoutSeconds: timeout,
 		Watch:          true,
 	}
-	watcher, err := clientset.CoreV1().Pods(namespace).Watch(context.Background(), watchOptions)
+	watcher, err := clientsetCoreV1.Pods(namespace).Watch(context.Background(), watchOptions)
 	if err != nil {
 		return err
 	}
@@ -178,7 +200,7 @@ func waitForPodDeletion(clientset *kubernetes.Clientset, namespace, podName stri
 		}
 	}
 }
-func execCommandsInPod(clientset *kubernetes.Clientset, namespace, podName, containerName string, commands []string, outputFile string) error {
+func execCommandsInPod(clientsetCoreV1 v1Inter.CoreV1Interface, namespace, podName, containerName string, commands []string, outputFile string) error {
 	var outputBuffer bytes.Buffer
 
 	// Note: You need result config to be able to connect to the cluster from outside
@@ -192,7 +214,7 @@ func execCommandsInPod(clientset *kubernetes.Clientset, namespace, podName, cont
 	}
 
 	for _, cmd := range commands {
-		req := clientset.CoreV1().RESTClient().Post().
+		req := clientsetCoreV1.RESTClient().Post().
 			Resource("pods").
 			Name(podName).
 			Namespace(namespace).
