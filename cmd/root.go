@@ -22,7 +22,7 @@ var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := pkg.Run(podName, namespace, container, serviceaccount, vscodeDebug, args, outputFile)
 		if err != nil {
-			panic(err)
+			return
 		}
 	},
 }

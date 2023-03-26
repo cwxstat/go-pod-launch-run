@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -70,9 +72,17 @@ func Run(podName,
 	// Launch the Pod
 	pod, err := createPod(clientset.CoreV1(), namespace, podName, containerName, serviceAccountName)
 	if err != nil {
-		panic(err)
+		//fmt.Println("Failed to create Pod: ", err.Error())
+		if strings.Contains(err.Error(), "already exists") {
+			if promptAndConfirm(fmt.Sprintf("Pod %s already exists. Do you want to delete it?\n", podName)) {
+				err = deletePod(clientset.CoreV1(), namespace, podName)
+				return err
+			}
+			return err
+		}
+		return err
 	}
-	fmt.Println("Pod created successfully.", pod.Status)
+	fmt.Println("Pod created successfully.", pod.Status.Phase)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -273,6 +283,7 @@ func (c *Config) execCommandsInPod(clientsetCoreV1 v1Inter.CoreV1Interface,
 	containerName string,
 	commands []string, outputFile string) error {
 	var outputBuffer bytes.Buffer
+	var outputErrorBuffer bytes.Buffer
 
 	for _, cmd := range commands {
 		req := clientsetCoreV1.RESTClient().Post().
@@ -294,9 +305,10 @@ func (c *Config) execCommandsInPod(clientsetCoreV1 v1Inter.CoreV1Interface,
 		}
 
 		var cmdOutputBuffer bytes.Buffer
+		var cmdStderrBuffer bytes.Buffer
 		err = executor.Stream(remotecommand.StreamOptions{
 			Stdout: &cmdOutputBuffer,
-			Stderr: os.Stderr,
+			Stderr: &cmdStderrBuffer,
 			Tty:    false,
 		})
 
@@ -307,7 +319,29 @@ func (c *Config) execCommandsInPod(clientsetCoreV1 v1Inter.CoreV1Interface,
 
 		outputBuffer.Write(cmdOutputBuffer.Bytes())
 		outputBuffer.WriteString("\n")
+
+		outputErrorBuffer.Write(cmdStderrBuffer.Bytes())
+		outputErrorBuffer.WriteString("\n")
+
 	}
 
-	return os.WriteFile(outputFile, outputBuffer.Bytes(), 0644)
+	err := os.WriteFile(outputFile, outputBuffer.Bytes(), 0644)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(fmt.Sprintf("%s%s", outputFile, ".err"), outputErrorBuffer.Bytes(), 0644)
+	return err
+}
+
+func promptAndConfirm(prompt string) bool {
+	fmt.Printf("%s [y/n]: ", prompt)
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		os.Exit(1)
+	}
+	if strings.ToLower(strings.TrimSpace(input)) == "y" {
+		return true
+	}
+	return false
 }
