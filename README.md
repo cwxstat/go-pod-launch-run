@@ -12,6 +12,6 @@ go get k8s.io/client-go@v0.26.3
 ```bash
 $ make
  make help                 -> display make targets
- make build-all            -> build: go get, tidy, fmt, go build -o grpl
+ make build-all            -> build: go get, tidy, fmt, go build -o gplr
 
 ```

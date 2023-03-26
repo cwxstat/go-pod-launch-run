@@ -7,7 +7,7 @@ help: ## display make targets
 
 
 .PHONY: build-all
-build-all:  ## build: go get, tidy, fmt, go build -o grpl
+build-all:  ## build: go get, tidy, fmt, go build -o gplr
 	@bash -c "go get k8s.io/client-go@v0.26.3"
 	@bash -c "go mod tidy"
 	@bash -c "go fmt ./..."
