@@ -16,7 +16,9 @@ import (
 	v1Inter "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/tools/remotecommand"
+	blog "log"
 	"net/url"
 	"os"
 	"strings"
@@ -117,9 +119,21 @@ func Run(podName,
 	if vscodeDebug {
 		fmt.Println("vscode debug")
 		fmt.Println("kubectl exec -it", podName, "-n", namespace, "--container", containerName, "--", "bash")
-		fmt.Println("kubectl port-forward", podName, "8080:8080")
+		fmt.Println("kubectl port-forward", podName, "8080:8080", "-n", namespace)
 		fmt.Println("code-server&")
 		fmt.Println("cat ~/.config/code-server/config.yaml")
+		fmt.Println("")
+		fmt.Println("http://localhost:8080")
+		fmt.Println("common commands:")
+		fmt.Println("aws configure list")
+		fmt.Println("aws sts get-caller-identity")
+		fmt.Println("")
+		fmt.Println("Additional installs:")
+		fmt.Println("yum groupinstall -y \"Development Tools\"")
+		fmt.Println("yum install -y python3-devel")
+		fmt.Println("yum install -y bind-utils")
+		fmt.Println("")
+		fmt.Println("When you're done, run the following command to delete the pod:")
 		fmt.Println("kubectl delete pod", podName, "-n", namespace, "--grace-period=0 --force")
 		return nil
 	}
@@ -136,28 +150,30 @@ func Run(podName,
 }
 
 func getClientset() (*kubernetes.Clientset, error) {
-	kubeconfig := os.Getenv("KUBECONFIG")
-	if kubeconfig == "" {
-		kubeconfig = clientcmd.RecommendedHomeFile
+	var config *rest.Config
+	var err error
+	// Check if the program is running inside a Kubernetes cluster.
+	if _, err = rest.InClusterConfig(); err != nil {
+		kubeconfig := os.Getenv("KUBECONFIG")
+		if kubeconfig == "" {
+			kubeconfig = clientcmd.RecommendedHomeFile
+		}
+
+		config, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+			&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig},
+			&clientcmd.ConfigOverrides{ClusterInfo: clientcmdapi.Cluster{Server: ""}}).ClientConfig()
+		if err != nil {
+			blog.Fatalf("Failed to load Kubernetes configuration: %v", err)
+		}
+	} else {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			blog.Fatalf("Failed to load in-cluster configuration: %v", err)
+		}
 	}
 
-	config, err := clientcmd.LoadFromFile(kubeconfig)
-	if err != nil {
-		return nil, err
-	}
+	return kubernetes.NewForConfig(config)
 
-	clientConfig := clientcmd.NewDefaultClientConfig(*config, &clientcmd.ConfigOverrides{})
-	restConfig, err := clientConfig.ClientConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	clientset, err := kubernetes.NewForConfig(restConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	return clientset, nil
 }
 
 func createPod(clientsetCoreV1 v1Inter.CoreV1Interface, namespace, podName, containerName,
