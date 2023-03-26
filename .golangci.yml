@@ -1,0 +1,23 @@
+linters-settings:
+  gofmt:
+    simplify: true
+  godot:
+    check-exported: false
+    period: false
+    govet: true
+
+
+
+linters:
+  enable:
+    - gofmt
+    - goimports
+    - godot
+    - stylecheck
+    - gosec
+    - misspell
+    - gocritic
+
+
+run:
+  timeout: 5m
