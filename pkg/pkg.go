@@ -56,7 +56,8 @@ func Run(podName,
 		panic(err)
 	}
 
-	if len(commands) == 0 && vscodeDebug {
+	if vscodeDebug {
+		log.Printf("vscodeDebug: %v", vscodeDebug)
 		commands = vscode.CommandsVscode()
 	} else if len(commands) == 0 {
 		commands = []string{"aws configure list", "aws sts get-caller-identity"}
@@ -107,6 +108,9 @@ func Run(podName,
 		fmt.Println("vscode debug")
 		fmt.Println("kubectl exec -it", podName, "-n", namespace, "--container", containerName, "--", "bash")
 		fmt.Println("kubectl port-forward", podName, "8080:8080")
+		fmt.Println("code-server&")
+		fmt.Println("cat ~/.config/code-server/config.yaml")
+		fmt.Println("kubectl delete pod", podName, "-n", namespace, "--grace-period=0 --force")
 		return nil
 	}
 
