@@ -13,7 +13,7 @@ func TestExecute(t *testing.T) {
 	}{
 		// TODO: Add test cases.
 		{
-			name: "Simple test",
+			name: "Testing in vscode debug mode",
 		},
 	}
 	for _, tt := range tests {
