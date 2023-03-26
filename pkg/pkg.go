@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cwxstat/go-pod-launch-run/pkg/vscode"
 	"github.com/emicklei/go-restful/v3/log"
 	"k8s.io/api/core/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -43,14 +44,21 @@ func do() {
 	B(&defaultSPDYExecutorFactory{})
 }
 
-func Run(podName, namespace, containerName, serviceAccountName string, commands []string, output string) error {
+func Run(podName,
+	namespace,
+	containerName,
+	serviceAccountName string,
+	vscodeDebug bool,
+	commands []string, output string) error {
 
 	clientset, err := getClientset()
 	if err != nil {
 		panic(err)
 	}
 
-	if len(commands) == 0 {
+	if len(commands) == 0 && vscodeDebug {
+		commands = vscode.CommandsVscode()
+	} else if len(commands) == 0 {
 		commands = []string{"aws configure list", "aws sts get-caller-identity"}
 	}
 
@@ -95,6 +103,13 @@ func Run(podName, namespace, containerName, serviceAccountName string, commands 
 
 	wg.Wait()
 
+	if vscodeDebug {
+		fmt.Println("vscode debug")
+		fmt.Println("kubectl exec -it", podName, "-n", namespace, "--container", containerName, "--", "bash")
+		fmt.Println("kubectl port-forward", podName, "8080:8080")
+		return nil
+	}
+
 	// Delete the Pod
 	err = deletePod(clientset.CoreV1(), namespace, podName)
 	if err != nil {
@@ -102,6 +117,7 @@ func Run(podName, namespace, containerName, serviceAccountName string, commands 
 	}
 
 	fmt.Println("Pod deleted successfully.")
+
 	return nil
 }
 
@@ -281,6 +297,7 @@ func (c *Config) execCommandsInPod(clientsetCoreV1 v1Inter.CoreV1Interface,
 		})
 
 		if err != nil {
+			fmt.Errorf("failed to execute command %s: %v", cmd, err)
 			return err
 		}
 

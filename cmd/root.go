@@ -20,7 +20,7 @@ var rootCmd = &cobra.Command{
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
-		err := pkg.Run(podName, namespace, container, serviceaccount, args, outputFile)
+		err := pkg.Run(podName, namespace, container, serviceaccount, vscodeDebug, args, outputFile)
 		if err != nil {
 			panic(err)
 		}
@@ -43,6 +43,8 @@ var serviceaccount string
 
 var outputFile string
 
+var vscodeDebug = false
+
 func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
@@ -55,7 +57,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&container, "container", "aws-cli", "Container name")
 	rootCmd.PersistentFlags().StringVar(&serviceaccount, "serviceaccount", "default", "Service account name")
 	rootCmd.PersistentFlags().StringVar(&outputFile, "output", "result.pod", "Output file")
-
+	rootCmd.PersistentFlags().BoolVar(&vscodeDebug, "vscodeDebug", false, "Debug with vscode")
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 
