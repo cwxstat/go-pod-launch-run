@@ -70,8 +70,20 @@ func TestWaitForPodDeletion(t *testing.T) {
 			Namespace: namespace,
 		},
 	}
+
 	_, err := clientset.CoreV1().Pods(namespace).Create(context.Background(), pod, metav1.CreateOptions{})
 	assert.NoError(t, err)
+
+	// Update pod asynchronously to running, after 2 second
+	go func() {
+		time.Sleep(2 * time.Second)
+		pod.Status.Phase = corev1.PodRunning
+		_, err := clientset.CoreV1().Pods(namespace).UpdateStatus(context.Background(), pod, metav1.UpdateOptions{})
+		assert.NoError(t, err)
+	}()
+
+	err = waitForPodRunning(clientset.CoreV1(), namespace, podName)
+	assert.NoError(t, err, "waitForPodRunning should not return an error if the pod is running within the timeout")
 
 	// Delete the pod asynchronously after 1 second
 	go func() {

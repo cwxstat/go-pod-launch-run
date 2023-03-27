@@ -208,6 +208,7 @@ func waitForPodRunning(clientsetCoreV1 v1Inter.CoreV1Interface, namespace, podNa
 		}
 
 		if pod.Status.Phase == v1.PodRunning {
+			fmt.Println("Pod is running.")
 			break
 		} else if pod.Status.Phase == v1.PodFailed || pod.Status.Phase == v1.PodSucceeded {
 			return fmt.Errorf("pod %s in namespace %s failed to start, current status: %v", podName, namespace, pod.Status.Phase)
