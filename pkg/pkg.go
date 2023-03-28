@@ -132,6 +132,7 @@ func Run(podName,
 		fmt.Println("yum groupinstall -y \"Development Tools\"")
 		fmt.Println("yum install -y python3-devel")
 		fmt.Println("yum install -y bind-utils")
+		fmt.Println("yum install -y procps lsof")
 		fmt.Println("")
 		fmt.Println("When you're done, run the following command to delete the pod:")
 		fmt.Println("kubectl delete pod", podName, "-n", namespace, "--grace-period=0 --force")
@@ -302,6 +303,7 @@ func (c *Config) execCommandsInPod(clientsetCoreV1 v1Inter.CoreV1Interface,
 	var outputBuffer bytes.Buffer
 	var outputErrorBuffer bytes.Buffer
 
+	fmt.Println("Executing commands in pod... wait for it...")
 	for _, cmd := range commands {
 		req := clientsetCoreV1.RESTClient().Post().
 			Resource("pods").
