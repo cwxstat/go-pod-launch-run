@@ -14,5 +14,13 @@ go get k8s.io/client-go@v0.26.3
 $ make
  make help                 -> display make targets
  make build-all            -> build: go get, tidy, fmt, go build -o gplr
+ make coverage             -> run tests with coverage, output to coverage.out
+ make check-coverage       -> check coverage is above 40%
+ make lint                 -> golangci-lint
+ make go-lint-fix          -> golangci-lint run --fix
+ make codefresh-environments -> codefresh get runtime-environments
+ make test                 -> go test ./...
+ make pipeline             -> run all codefresh pipeline checks
+
 
 ```
